@@ -1,5 +1,9 @@
 package com.veyrost.winterlive
 
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.opengl.EGL14
 import android.opengl.EGLExt
 import android.opengl.GLES20
@@ -17,7 +21,11 @@ import kotlin.random.Random
 class WinterWallpaperService : WallpaperService() {
     override fun onCreateEngine(): Engine = WinterEngine()
 
-    inner class WinterEngine : Engine() {
+    inner class WinterEngine : Engine(), SensorEventListener {
+        private val sensorManager by lazy { getSystemService(SENSOR_SERVICE) as SensorManager }
+        private val accelerometer by lazy { sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) }
+        private val gravity = FloatArray(3)
+        private var lastShake = 0L
         private var renderer: WinterRenderer? = null
         private var renderThread: Thread? = null
         @Volatile private var visible = false
@@ -30,7 +38,7 @@ class WinterWallpaperService : WallpaperService() {
 
         override fun onVisibilityChanged(isVisible: Boolean) {
             visible = isVisible
-            if (isVisible) startRenderer() else stopRenderer()
+            if (isVisible) { accelerometer?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }; startRenderer() } else { sensorManager.unregisterListener(this); stopRenderer() }
         }
 
         override fun onSurfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
@@ -44,14 +52,23 @@ class WinterWallpaperService : WallpaperService() {
             super.onSurfaceDestroyed(holder)
         }
 
-        override fun onTouchEvent(event: MotionEvent) {
-            renderer?.onTouch(event.x, event.y, event.action, event.pointerCount)
-            super.onTouchEvent(event)
+        override fun onTouchEvent(event: MotionEvent) { super.onTouchEvent(event) }
+
+        override fun onSensorChanged(event: SensorEvent) {
+            if (event.sensor.type != Sensor.TYPE_ACCELEROMETER) return
+            val a = event.values
+            for (i in 0..2) gravity[i] += 0.12f * (a[i] - gravity[i])
+            val lx = a[0] - gravity[0]; val ly = a[1] - gravity[1]
+            renderer?.setDeviceMotion((-gravity[0] / SensorManager.GRAVITY_EARTH).coerceIn(-1f,1f), (-gravity[1] / SensorManager.GRAVITY_EARTH).coerceIn(-1f,1f))
+            val now = System.currentTimeMillis()
+            if (kotlin.math.sqrt(lx*lx + ly*ly) > 5.5f && now - lastShake > 900L) { lastShake = now; renderer?.onShake() }
         }
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
         override fun onDestroy() {
             visible = false
             stopRenderer()
+            sensorManager.unregisterListener(this)
             renderer?.release()
             renderer = null
             super.onDestroy()
@@ -110,6 +127,14 @@ private class WinterRenderer {
     private var snowmanParts = 0
     private var rollingX = 0f
     private var rollingZ = 2.3f
+    private var tiltX = 0f
+    private var tiltY = 0f
+    private var shakeEnergy = 0f
+    private val snowField = FloatArray(48 * 24)
+    private var totalSnow = 0f
+
+    fun setDeviceMotion(x: Float, y: Float) { tiltX = tiltX * 0.82f + x * 0.18f; tiltY = tiltY * 0.82f + y * 0.18f }
+    fun onShake() { shakeEnergy = (shakeEnergy + 0.8f).coerceAtMost(2f) }
 
     private val sphere = Mesh.sphere(18, 24)
     private val ground = Mesh.plane(30f)
@@ -230,12 +255,14 @@ private class WinterRenderer {
             drawMesh(cone, x, 2.39f * scale, z + 0.025f, 0.58f * scale, 1.08f * scale, 0.58f * scale, 0.88f, 0.94f, 0.98f, 0.58f)
         }
 
-        // Distant snow drifts.
-        for (i in -3..3) {
-            drawMesh(sphere, i * 2.5f, 0.05f, -5.4f, 1.8f, 0.24f, 1.2f, 0.91f, 0.96f, 0.99f)
+        updateSnowField(dt)
+        for (i in -5..5) {
+            val bank = snowField[12 * 48 + (i + 5) * 4 + 2].coerceIn(0f, 0.75f)
+            drawMesh(sphere, i * 1.35f, 0.02f + bank * 0.22f, 1.2f, 0.95f, 0.10f + bank * 0.32f, 0.55f, 0.91f, 0.96f, 0.99f)
         }
 
         // Snowman is assembled from exactly three rolled snowballs.
+        snowmanParts = maxOf(snowmanParts, when { totalSnow > 34f -> 3; totalSnow > 19f -> 2; totalSnow > 7f -> 1; else -> 0 })
         if (snowmanParts >= 1) drawMesh(sphere, 0f, 0.62f, 1.1f, 0.68f, 0.68f, 0.68f, 0.96f, 0.985f, 1f)
         if (snowmanParts >= 2) drawMesh(sphere, 0f, 1.58f, 1.1f, 0.49f, 0.49f, 0.49f, 0.98f, 0.995f, 1f)
         if (snowmanParts >= 3) {
@@ -260,9 +287,14 @@ private class WinterRenderer {
         val values = FloatArray(flakes.size * 6)
         var p = 0
         for (flake in flakes) {
-            flake.y -= flake.speed * dt
-            flake.x += sin((elapsed * 0.55f + flake.z).toDouble()).toFloat() * dt * 0.18f
+            flake.y -= (flake.speed + tiltY * 0.65f) * dt
+            flake.x += (sin((elapsed * 0.55f + flake.z).toDouble()).toFloat() * 0.18f + tiltX * 1.9f) * dt
+            flake.z += tiltY * dt * 0.8f
             if (flake.y < 0.05f) {
+                val ix = (((flake.x + 9f) / 18f) * 47f).toInt().coerceIn(0,47)
+                val iz = (((flake.z + 5f) / 15f) * 23f).toInt().coerceIn(0,23)
+                snowField[iz * 48 + ix] = (snowField[iz * 48 + ix] + flake.size * 0.16f).coerceAtMost(1.2f)
+                totalSnow = (totalSnow + flake.size * 0.16f).coerceAtMost(50f)
                 flake.y = Random.nextFloat() * 7f + 5f
                 flake.x = Random.nextFloat() * 18f - 9f
                 flake.z = Random.nextFloat() * 15f - 5f
@@ -288,6 +320,17 @@ private class WinterRenderer {
         GLES20.glEnableVertexAttribArray(aNormal)
         GLES20.glVertexAttribPointer(aNormal, 3, GLES20.GL_FLOAT, false, 24, buffer)
         GLES20.glDrawArrays(GLES20.GL_POINTS, 0, flakes.size)
+    }
+
+    private fun updateSnowField(dt: Float) {
+        if (shakeEnergy > 0.02f) {
+            val release = (shakeEnergy * dt * 0.08f).coerceAtMost(0.02f)
+            for (i in snowField.indices) snowField[i] = (snowField[i] - release).coerceAtLeast(0f)
+            shakeEnergy = (shakeEnergy - dt * 0.7f).coerceAtLeast(0f)
+        }
+        val shift = (tiltX * dt * 2.4f).toInt()
+        if (shift > 0) for (z in 0 until 24) for (x in 47 downTo 1) snowField[z*48+x] = maxOf(snowField[z*48+x], snowField[z*48+x-1] * 0.985f)
+        if (shift < 0) for (z in 0 until 24) for (x in 0 until 47) snowField[z*48+x] = maxOf(snowField[z*48+x], snowField[z*48+x+1] * 0.985f)
     }
 
     private fun drawMesh(
