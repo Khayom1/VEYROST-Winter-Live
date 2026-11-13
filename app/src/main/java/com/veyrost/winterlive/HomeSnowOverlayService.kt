@@ -42,7 +42,7 @@ class HomeSnowOverlayService : Service(), SensorEventListener {
         "com.android.launcher3",
         "com.miui.home",
         "com.oppo.launcher",
-        "com OnePlus.launcher"
+        "net.oneplus.launcher"
     )
 
     private val monitor = object : Runnable {
@@ -109,7 +109,7 @@ class HomeSnowOverlayService : Service(), SensorEventListener {
         if (snowView != null) return
         val view = SnowOverlayView(this)
         val type = if (Build.VERSION.SDK_INT >= 26) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                   else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
+                   else WindowManager.LayoutParams.TYPE_PHONE
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -189,7 +189,7 @@ private class SnowOverlayView(context: Context) : View(context) {
         // Calibrated snow ledges over Samsung's common 5-column home-grid and dock.
         // The user can fine-tune grid alignment in a later calibration screen.
         paint.color = 0xDDF7FCFF.toInt()
-        val rows = floatArrayOf(0.205f, 0.345f, 0.485f, 0.625f, 0.865f)
+        val rows = floatArrayOf(0.105f, 0.215f, 0.325f, 0.435f, 0.875f)
         val columns = 5
         val cell = w / columns
         for (row in rows) {
