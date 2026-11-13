@@ -376,10 +376,6 @@ private class WinterRenderer {
             varying vec3 vNormal;
             varying float vHeight;
             void main() {
-                if (gl_PointCoord.x >= 0.0 && gl_PointCoord.y >= 0.0) {
-                    float d = distance(gl_PointCoord, vec2(0.5));
-                    if (d > 0.5) discard;
-                }
                 float diffuse = max(dot(normalize(vNormal), normalize(uLight)), 0.0);
                 float light = 0.58 + diffuse * 0.42;
                 gl_FragColor = vec4(uColor.rgb * light, uColor.a);
