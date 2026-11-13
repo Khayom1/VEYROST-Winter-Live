@@ -129,7 +129,9 @@ private class WinterRenderer {
         GLES20.glUseProgram(program)
         time += 0.016f
         quad(-1f,-1f,1f,1f,0.035f,0.09f,0.16f)
-        triangle(-1f,-0.25f,-0.38f,0.58f,0.15f,-0.25f,0.42f,0.58f,0.75f,0.24f,1f,-0.22f,0.54f,0.69f,0.79f)
+        triangle(-1f,-0.25f,-0.38f,0.58f,0.15f,-0.25f,0.54f,0.69f,0.79f)
+        triangle(-0.38f,0.58f,0.42f,0.58f,0.15f,-0.25f,0.66f,0.79f,0.88f)
+        triangle(0.42f,0.58f,1f,-0.22f,0.15f,-0.25f,0.42f,0.58f,0.75f)
         quad(-1f,-1f,1f,-0.25f,0.82f,0.91f,0.97f)
         // Distant fir trees
         for (i in 0..8) {
