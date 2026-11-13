@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
     <uses-feature android:glEsVersion="0x00020000" android:required="true" />
     <application android:allowBackup="false" android:label="VEYROST Winter Live" android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity android:name=".MainActivity" android:exported="true">
@@ -8,6 +10,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service android:name=".HomeSnowOverlayService" android:exported="false" />
         <service
             android:name=".WinterWallpaperService"
             android:label="VEYROST Winter Live"
